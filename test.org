@@ -1,0 +1,30 @@
+#+TEST 1
+#+TEST 2
+* header1
+
+*bold* /itially/ ~code?~ _underline_ +crossout+ more paragraph
+ 
+A second paragraph
+
+this is a [[https://www.ellem.ai][link]]
+
+ - Now hopefullt
+ - this list
+ - doens't shit
+ - itself
+
+now do you see? This isn't a paragraph :(
+
+ * yes
+ * no
+   - fuck
+   - me
+
+and 
+ 1. help
+ 2. me
+
+#+LMSECCLASS 
+** header2
+
+[[header1]]

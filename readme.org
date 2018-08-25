@@ -1,0 +1,51 @@
+* org2laz
+
+Converts orgmode text into LAZ html. Made to automate the creation of
+HTML in favor of the more favrabole format of orgmode. org2laz is not
+a template engine, org2laz is not a translator, org2laz is a *lossy
+exporter*.
+
+Version 0.1-perl
+
+Depends on [[https://metacpan.org/release/Org-Parser][Org::Parser]]
+
+Ellem Laboratories
+
+* Header/Section relationship
+
+By default, headers 1 and 2 (h1/h2) will create their own ~<section>~
+tags.
+
+* Options
+
+There are a few option the consider when writting in org mode with
+intent of converting it to laz. All options are considered 'Comments'
+by the parser. Comments that are not recgonized by the following
+arguments are ignored and not included in the output.
+
+** ~#+LMINC <filepath>~
+
+Will place the contents of /filepath/ into the output stream. The
+contents of /filepath/ are not parsed in any way.
+
+** ~#+LMINCHEADER <filepath>~ and ~#+LMINCFOOTER <filepath>~
+
+~LMINCHEADER~ and ~LMINCFOOTER~ will place the contents of /filepath/
+before and after the parsed output respectfully
+
+** ~#+LMSECCLASS <class>~
+
+Sets the CSS class that remaining ~<section>~ elements will be
+attributed. To set to /no class/, simply write ~#+LMSECCLASS~ (with no
+parameter).
+
+* TODO
+
+ - Document options (TITLE, DESC, ect.)
+ - Tables
+ - Commandline options
+   * read from stdin
+   * compress html
+   * LMINCHEADER and LMINCFOOTER to be compatable with hxincl
+ - PHP logic integration
+ - Images

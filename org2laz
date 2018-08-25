@@ -1,0 +1,263 @@
+#!/usr/bin/perl -w
+use strict;
+use Org::Parser;
+use File::Basename;
+
+# Help screen and version info
+if(!scalar(@ARGV) || $ARGV[0] =~ /^--version|--help$/)
+{
+	print "Usage: org2laz FILE\n";
+	print "Converts orgmode text (FILE) into LAZ html (standard output)\n";
+	print "\nVersion 0.0\n";
+	exit();
+}
+
+my $file     = $ARGV[0]; # org-mode file path
+my $inc_path = dirname($file); # include path (for LMINC options);
+
+# New parser object and load it with the file
+my $orgp = Org::Parser->new();
+my $doc = $orgp->parse_file($file);
+
+# Subroutine to compare if the specific element can be inside of a
+# paragraph (<p>).
+sub canparagraph
+{
+	my $ref = shift;
+	return $ref eq 'Org::Element::Text' 
+		|| $ref eq 'Org::Element::Link';
+}
+
+my $inp = 0;        # Status of if the current element is in a <p>
+my $LMSECCLASS = 0; # Used to store the LMSECCLASS argument.
+my $LMHEADER = '';  # Stored content of LMHEADER
+my $LMFOOTER = '';  # Stored content of LMFOOTER
+
+# Master subroutune that calls itself recurisivly
+sub rec_parse
+{
+	my $el = shift;   # The Org::Parser element to be parsed
+	my $ci = shift;   # The index of the element relative to it's parent
+	my $cp = shift;   # can this element use <p> tags? (0/1)
+	my $ret = '';     # The return string of the fully parsed element
+	my $postfix = ''; # Text that will be appended to $ret only after
+					  # the child elements have been procsessed into
+					  # $ret.
+
+	# <a>
+	if(ref($el) eq 'Org::Element::Link')
+	{
+		my $url  = $el->link;
+		$url =~ s/"/\\"/g;
+		my $desc = $url;
+
+		# Sometimes the desciption isn't always present So we just
+		# assume the desciption is the url itself
+		if(defined($el->description))
+		{
+			$desc = rec_parse($el->description, 0, 0);
+		}
+		$ret .= "<a href=\"$url\">$desc</a>\n";
+	}
+
+	# Raw text. Very much the used the majority of the time.
+	if(ref($el) eq 'Org::Element::Text')
+	{
+		my $tag = '';
+		$tag = "em" if($el->style eq "I");
+		$tag = "strong" if($el->style eq "B");
+		$tag = "code" if($el->style eq "V");
+		$tag = "mark" if($el->style eq "U");
+		$tag = "strike" if($el->style eq "S");
+		if($tag)
+		{
+			$ret  .= "<$tag>";
+			$postfix .= "</$tag>";
+		}
+		$ret .= $el->text;
+	}	
+
+	# Headers (<h1>...) and also laz foundation (<section> <main>)
+	if(ref($el) eq 'Org::Element::Headline')
+	{
+		# Generate the attibutes for the section from the options
+		# specified earlier in the document.
+		my $secattribs = '';
+		if($LMSECCLASS)
+		{
+			$secattribs = " class=\"$LMSECCLASS\"";
+		}
+
+		# handle opening and closing of laz parts only when the level
+		# of header is either <h1> or <h2>
+		if($el->level <= 2)
+		{
+			# If the current element has a parent that is also a
+			# header, close that header's section off before putting a
+			# new one.
+			if(ref($el->parent) eq "Org::Element::Headline")
+			{
+				$ret .= "</main>\n</section>\n";
+			}
+			else
+			{
+				#TODO: get rid of $postfix logic. I don't like it.
+				$postfix .= "</main>\n</section>\n";
+			}
+			$ret .= "<section$secattribs>\n<main>\n";
+		}
+		# add the actuall <h> tag.
+		my $lev = $el->level;
+		$ret .= "<h$lev>" . rec_parse($el->title, 0, 0) 
+			. "</h$lev>\n";
+	}
+
+	# <ul> <ol> items. These are pretty strait forward.
+	if(ref($el) eq 'Org::Element::List')
+	{
+		my $tag = $el->type eq 'O' ? "ol" : "ul";
+		$ret .= "<$tag>\n";
+		$postfix .= "</$tag>\n";
+	}
+
+	# <li> have their nested content in children (which are handled
+	# later). We simply need to wrap tags around the kids. We'll also
+	# disable paragraphing because it would be redundant wraping
+	if(ref($el) eq 'Org::Element::ListItem')
+	{
+		$ret .= "<li>\n";
+		$postfix .= "</li>\n";
+		$cp = 0;
+	}
+
+	# Comments (but we treat them as options/arguments). See
+	# readme.org for an explanation on all arguments.
+	if(ref($el) eq 'Org::Element::Comment')
+	{
+		# We have to split the element string because consecutive
+		# options will be coupled into a single element.
+		for my $str (split(/\n/, $el->_str))
+		{
+			# Regex to prase the comment arguments
+			$str =~ m/#\+([A-Z\_]+)\s*(.*)?/;
+			my $var = $1;
+			my $val = $2;
+			
+			# LMSECCLASS
+			if($var eq "LMSECCLASS")
+			{
+				$LMSECCLASS = $val ? $val : 0;
+			}
+
+			# LMINC*
+			elsif($var =~ /^LMINC/ && $val)
+			{
+				# Open the file that needs to be included
+				if(!open(my $fh, '<', $inc_path . '/' . $val))
+				{
+					print STDERR "Could not include file '$val': $!";
+				}
+				#TODO: I'm sick of if(error)else blocks. I need to put
+				#each element parsing into a seperate sub so I can
+				#just reutnr on error.
+				else
+				{
+					#LMINCHEADER and LMINCFOOTER
+					if($var eq 'LMINCHEADER') {
+						$LMHEADER .= $_ while(<$fh>); }
+
+					if($var eq 'LMINCFOOTER') {
+						$LMFOOTER .= $_ while(<$fh>); }
+
+					# And of course just a general include
+					if($var eq 'LMINC') {
+						$ret .= $_ while(<$fh>); }
+					close($fh);
+				}
+			}
+		}
+	}
+
+	# Paragraphs. The below log formats paragraphs by inseting <p>
+	# tags and trimming all unused whitespace.
+	my $postp = $inp;
+	if(canparagraph(ref($el)))
+	{
+		# Trim all vertical whitespace that is between 2 newlines.
+		$ret =~ s/\n\h*\n/\n\n/g;
+		if($cp && !$inp)
+		{
+			$ret = "<p>\n" . $ret;
+			$inp = 1;
+		}
+
+		# Paragraph breaks. Every time 2 newlines are found, replace
+		# it with an close/open paragarph tags only if we're already
+		# writing paragraphs and pragraphs are allowed by the parent
+		if($inp 
+		   && $cp)
+		{
+			$ret =~ s/^\n+//g;
+			$ret =~ s/[\n]{2,}/\n<\/p>\n<p>\n/g;
+		}
+
+		# Look at that lispy looking mess. This is asking if we're in
+		# a paragraph, and the parent is allowing us to create
+		# paragraphs, and one of the follow are true:
+		#    - The next sibling cannot be paragraphed (canparagraph)
+		#    - There is no next sibling
+		if($inp
+		   && $cp
+		   && 
+		   (
+			(
+			 scalar($el->parent->children) > $ci+1
+			 && !canparagraph(ref($el->parent->{children}[$ci+1]))
+			)
+			|| scalar($el->parent->children) == $ci+1
+		   )
+		)
+		{
+			# Normally there's 2 newline characters between a
+			# paragraph and the next header. So a </p><p> will be
+			# placed there. Let's clean that up. TODO: prevent this
+			# from happening in the first place in the logic above
+			$ret =~ s/\n<\/p>\n<p>\n$/\n/g;
+			$ret .= "</p>\n";
+			$inp = 0;
+		}
+		
+		# Trim newlines on either end (Should I just move this to an
+		# html-wide regex..?)
+		$ret =~ s/^\n+//g;
+	}
+
+	# Let's go recursive now. Parse all the children of this element
+	# if the exists.
+	if( $el->children )
+	{
+		for(my $i = 0; $i < scalar(@{$el->children}); $i++)
+		{
+			my $child = $el->{children}[$i];
+			$ret .= rec_parse($child, $i, $cp);
+		}
+	}
+
+	# Add the postfix to after whatever the children are and send the
+	# results up the the parent.
+	$ret .= $postfix;
+	return $ret;
+}
+
+# Run the converter on the entire document.
+my $html = rec_parse ($doc, 0, 1);
+
+# clean up things that the recursive logic can't do well with
+# TODO: fix this. seems hacky. But not too important.
+$html =~ s/<p>\s*<\/p>\n//g;
+
+# Inlcude the LMHEADER and LMFOOTER to the actuall html
+$html = $LMHEADER . $html . $LMFOOTER;
+
+# :)
+print $html;
