@@ -97,14 +97,14 @@ sub rec_parse
 			# new one.
 			if(ref($el->parent) eq "Org::Element::Headline")
 			{
-				$ret .= "</main>\n</section>\n";
+				$ret .= "</section>\n</article>\n";
 			}
 			else
 			{
 				#TODO: get rid of $postfix logic. I don't like it.
-				$postfix .= "</main>\n</section>\n";
+				$postfix .= "</section>\n</article>\n";
 			}
-			$ret .= "<section$secattribs>\n<main>\n";
+			$ret .= "<article$secattribs>\n<section>\n";
 		}
 		# add the actuall <h> tag.
 		my $lev = $el->level;
@@ -250,7 +250,10 @@ sub rec_parse
 }
 
 # Run the converter on the entire document.
-my $html = rec_parse ($doc, 0, 1);
+my $html .= "<main>\n";
+$html .= rec_parse ($doc, 0, 1);
+$html .= "</main>";
+
 
 # clean up things that the recursive logic can't do well with
 # TODO: fix this. seems hacky. But not too important.
