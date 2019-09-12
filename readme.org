@@ -9,7 +9,13 @@ Version 0.1-perl
 
 Depends on [[https://metacpan.org/release/Org-Parser][Org::Parser]]
 
-Ellem Laboratories
+* Authors
+
+ - Ellem Laboratories [[https://www.ellem.ai/products/libreware.php]]
+
+** License
+
+See [[LICENSE]]
 
 * Header/Section relationship
 
